@@ -549,7 +549,7 @@ PCPATCH *pc_patch_set_schema(PCPATCH *patch, const PCSCHEMA *new_schema,
                              double def)
 {
   PCDIMENSION **new_dimensions = new_schema->dims;
-  PCDIMENSION *old_dimensions[new_schema->ndims];
+  PCDIMENSION **old_dimensions = NULL;
   const PCSCHEMA *old_schema = patch->schema;
   PCPATCH_UNCOMPRESSED *paout;
   PCPOINT opt, npt;
@@ -557,6 +557,7 @@ PCPATCH *pc_patch_set_schema(PCPATCH *patch, const PCSCHEMA *new_schema,
   PCPOINT *dpt;
   size_t i, j;
 
+  old_dimensions = (PCDIMENSION**)pcalloc(new_schema->ndims * sizeof(PCDIMENSION *));
   // create a point for storing the default values
   dpt = pc_point_make(new_schema);
 
@@ -571,6 +572,7 @@ PCPATCH *pc_patch_set_schema(PCPATCH *patch, const PCSCHEMA *new_schema,
       {
         pcerror("dimension interpretations are not matching");
         pc_point_free(dpt);
+        pcfree(old_dimensions);
         return NULL;
       }
     }
@@ -634,6 +636,7 @@ PCPATCH *pc_patch_set_schema(PCPATCH *patch, const PCSCHEMA *new_schema,
   }
 
   pc_point_free(dpt);
+  pcfree(old_dimensions);
 
   if (pain != patch)
     pc_patch_free(pain);
@@ -649,17 +652,20 @@ PCPATCH *pc_patch_transform(const PCPATCH *patch, const PCSCHEMA *new_schema,
                             double def)
 {
   PCDIMENSION **new_dimensions = new_schema->dims;
-  PCDIMENSION *old_dimensions[new_schema->ndims];
+  PCDIMENSION **old_dimensions = NULL;
   const PCSCHEMA *old_schema = patch->schema;
   PCPATCH_UNCOMPRESSED *paout;
   PCPOINT opt, npt;
   PCPATCH *pain;
   size_t i, j;
 
+  old_dimensions = (PCDIMENSION **)pcalloc(new_schema->ndims * sizeof(PCDIMENSION *));
+
   if (old_schema->srid != new_schema->srid)
   {
     pcwarn("old and new schemas have different srids, and data "
            "reprojection is not yet supported");
+    pcfree(old_dimensions);
     return NULL;
   }
 
@@ -710,6 +716,7 @@ PCPATCH *pc_patch_transform(const PCPATCH *patch, const PCSCHEMA *new_schema,
   {
     pcerror("%s: failed to compute patch extent", __func__);
     pc_patch_free((PCPATCH *)paout);
+    pcfree(old_dimensions);
     return NULL;
   }
 
@@ -717,8 +724,11 @@ PCPATCH *pc_patch_transform(const PCPATCH *patch, const PCSCHEMA *new_schema,
   {
     pcerror("%s: failed to compute patch stats", __func__);
     pc_patch_free((PCPATCH *)paout);
+    pcfree(old_dimensions);
     return NULL;
   }
+
+  pcfree(old_dimensions);
 
   return (PCPATCH *)paout;
 }

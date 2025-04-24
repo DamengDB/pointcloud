@@ -24,8 +24,8 @@ int pc_compare_dim(const void *a, const void *b, void *arg)
   PCDIMENSION_LIST dim = (PCDIMENSION_LIST)arg;
   uint32_t byteoffset = dim[0]->byteoffset;
   uint32_t interpretation = dim[0]->interpretation;
-  double da = pc_double_from_ptr(a + byteoffset, interpretation);
-  double db = pc_double_from_ptr(b + byteoffset, interpretation);
+  double da = pc_double_from_ptr((const uint8_t*)a + byteoffset, interpretation);
+  double db = pc_double_from_ptr((const uint8_t*)b + byteoffset, interpretation);
   int cmp = ((da > db) - (da < db));
   return (cmp == 0 && dim[1]) ? pc_compare_dim(a, b, dim + 1) : cmp;
 }
@@ -68,6 +68,7 @@ PCDIMENSION_LIST pc_schema_get_dimensions_by_name(const PCSCHEMA *schema,
     dim[i] = pc_schema_get_dimension_by_name(schema, name[i]);
     if (!dim[i])
     {
+      pcfree(dim);
       pcerror("dimension \"%s\" does not exist", name[i]);
       return NULL;
     }

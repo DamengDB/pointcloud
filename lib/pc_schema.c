@@ -10,9 +10,9 @@
  *
  ***********************************************************************/
 
-#include <libxml/parser.h>
-#include <libxml/xpath.h>
-#include <libxml/xpathInternals.h>
+//#include <libxml/parser.h>
+//#include <libxml/xpath.h>
+//#include <libxml/xpathInternals.h>
 
 #include "pc_api_internal.h"
 #include "stringbuffer.h"
@@ -163,7 +163,7 @@ static void pc_dimension_free(PCDIMENSION *pcd)
   pcfree(pcd);
 }
 
-static PCSCHEMA *pc_schema_new(uint32_t ndims)
+PCSCHEMA *pc_schema_new(uint32_t ndims)
 {
   PCSCHEMA *pcs = pcalloc(sizeof(PCSCHEMA));
   pcs->dims = pcalloc(sizeof(PCDIMENSION *) * ndims);
@@ -331,7 +331,7 @@ void pc_schema_check_xyzm(PCSCHEMA *s)
     }
   }
 }
-
+#if 0
 static char *xml_node_get_content(xmlNodePtr node)
 {
   xmlNodePtr cur = node->children;
@@ -548,7 +548,7 @@ cleanup:
 
   return s;
 }
-
+#endif
 uint32_t pc_schema_is_valid(const PCSCHEMA *s)
 {
   int i;

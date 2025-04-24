@@ -62,6 +62,27 @@ PCPOINT *pc_point_from_data(const PCSCHEMA *s, const uint8_t *data)
   return pt;
 }
 
+PCPOINT *pc_point_from_data_clone(const PCSCHEMA *s, const uint8_t *data)
+{
+  PCPOINT *pt;
+
+  if (!s)
+  {
+    pcerror("null schema passed into pc_point_from_data");
+    return NULL;
+  }
+
+  /* Reference the external data */
+  pt = pcalloc(sizeof(PCPOINT));
+  pt->data = pcalloc(s->size);
+  memcpy(pt->data, (uint8_t *)data, s->size);
+
+  /* Set up basic info */
+  pt->schema = s;
+  pt->readonly = PC_FALSE;
+  return pt;
+}
+
 void pc_point_free(PCPOINT *pt)
 {
   if (!pt->readonly)

@@ -11,7 +11,10 @@
  ***********************************************************************/
 
 #include "pc_pgsql.h"
-
+#include "pc_api_internal.h"
+#include <assert.h>
+#include <stdint.h>
+#if 0
 #include "access/hash.h"
 #include "access/heapam.h"
 #include "access/htup_details.h"
@@ -504,15 +507,14 @@ pc_schema_from_pcid(uint32 pcid, FunctionCallInfo fcinfo)
   schema_cache->next_slot = (schema_cache->next_slot + 1) % SchemaCacheSize;
   return schema;
 }
-
+#endif
 /**********************************************************************************
  * SERIALIZATION/DESERIALIZATION UTILITIES
  */
-
 SERIALIZED_POINT *pc_point_serialize(const PCPOINT *pcpt)
 {
-  size_t serpt_size = sizeof(SERIALIZED_POINT) - 1 + pcpt->schema->size;
-  SERIALIZED_POINT *serpt = palloc(serpt_size);
+  size_t serpt_size = sizeof(uint32_t) + sizeof(uint32_t) + pcpt->schema->size;
+  SERIALIZED_POINT *serpt = pcalloc(serpt_size);
   serpt->pcid = pcpt->schema->pcid;
   memcpy(serpt->data, pcpt->data, pcpt->schema->size);
   SET_VARSIZE(serpt, serpt_size);
@@ -523,24 +525,24 @@ PCPOINT *pc_point_deserialize(const SERIALIZED_POINT *serpt,
                               const PCSCHEMA *schema)
 {
   PCPOINT *pcpt;
-  size_t pgsize = VARSIZE(serpt) + 1 - sizeof(SERIALIZED_POINT);
+  size_t pgsize = VARSIZE(serpt) - sizeof(uint32_t) - sizeof(uint32_t); //we are different
   /*
    * Big problem, the size on disk doesn't match what we expect,
    * so we cannot reliably interpret the contents.
    */
   if (schema->size != pgsize)
   {
-    elog(ERROR, "schema size and disk size mismatch, repair the schema");
+    pcerror("schema size and disk size mismatch, repair the schema");
     return NULL;
   }
-  pcpt = pc_point_from_data(schema, serpt->data);
+  pcpt = pc_point_from_data_clone(schema, serpt->data);
   return pcpt;
 }
 
 size_t pc_patch_serialized_size(const PCPATCH *patch)
 {
   size_t stats_size = pc_stats_size(patch->schema);
-  size_t common_size = BUFFERALIGN(sizeof(SERIALIZED_PATCH)) - 1;
+  size_t common_size = sizeof(uint32_t) * 4 + sizeof(PCBOUNDS); /* we edit this */
   switch (patch->type)
   {
   case PC_NONE:
@@ -828,11 +830,13 @@ pc_patch_uncompressed_deserialize(const SERIALIZED_PATCH *serpatch,
   uint8_t *buf;
   size_t stats_size = pc_stats_size(schema); // 3 pcpoints worth of stats
   PCPATCH_UNCOMPRESSED *patch = pcalloc(sizeof(PCPATCH_UNCOMPRESSED));
+  PCSTATS *readonly_stats;
+  size_t datasize = 0;
 
   /* Set up basic info */
   patch->type = serpatch->compression;
   patch->schema = schema;
-  patch->readonly = true;
+  patch->readonly = false;
   patch->npoints = serpatch->npoints;
   patch->maxpoints = 0;
   patch->bounds = serpatch->bounds;
@@ -840,17 +844,29 @@ pc_patch_uncompressed_deserialize(const SERIALIZED_PATCH *serpatch,
   buf = (uint8_t *)serpatch->data;
 
   /* Point into the stats area */
-  patch->stats = pc_patch_stats_deserialize(schema, buf);
+  readonly_stats = pc_patch_stats_deserialize(schema, buf);
 
-  /* Advance data pointer past the stats serialization */
-  patch->data = buf + stats_size;
+  /* bug672664, stats was freed, so result is not correct */
+  patch->stats = pc_stats_clone(readonly_stats);
+
+  pc_stats_free(readonly_stats);
 
   /* Calculate the point data buffer size */
-  patch->datasize = VARSIZE(serpatch) - BUFFERALIGN(sizeof(SERIALIZED_PATCH)) +
-                    1 - stats_size;
-  if (patch->datasize != patch->npoints * schema->size)
+  datasize = VARSIZE(serpatch) - sizeof(uint32_t) * 4 - sizeof(PCBOUNDS) - stats_size; // we edit this
+  
+  if (datasize != patch->npoints * schema->size)
+  {
+    pc_patch_free(patch);
     pcerror("%s: calculated patch data sizes don't match (%d != %d)", __func__,
-            patch->datasize, patch->npoints * schema->size);
+             datasize, patch->npoints * schema->size);
+    return NULL;
+  }
+
+  /* Advance data pointer past the stats serialization */
+  /* We copy the memory because we set read-only = false */
+  patch->data = pcalloc(datasize);
+  memcpy(patch->data, buf + stats_size, datasize);
+  patch->datasize = datasize;
 
   return (PCPATCH *)patch;
 }
@@ -878,6 +894,8 @@ pc_patch_dimensional_deserialize(const SERIALIZED_PATCH *serpatch,
   int ndims = schema->ndims;
   int npoints = serpatch->npoints;
   size_t stats_size = pc_stats_size(schema); // 3 pcpoints worth of stats
+  size_t left_space = 0;
+  PCSTATS *readonly_stats;
 
   /* Reference the external data */
   patch = pcalloc(sizeof(PCPATCH_DIMENSIONAL));
@@ -885,23 +903,43 @@ pc_patch_dimensional_deserialize(const SERIALIZED_PATCH *serpatch,
   /* Set up basic info */
   patch->type = serpatch->compression;
   patch->schema = schema;
-  patch->readonly = true;
+  patch->readonly = false;
   patch->npoints = npoints;
   patch->bounds = serpatch->bounds;
 
   /* Point into the stats area */
-  patch->stats = pc_patch_stats_deserialize(schema, serpatch->data);
+  readonly_stats = pc_patch_stats_deserialize(schema, serpatch->data);
+
+  /* bug672664, stats was freed, so result is not correct */
+  patch->stats = pc_stats_clone(readonly_stats);
+
+  pc_stats_free(readonly_stats);
 
   /* Set up dimensions */
   patch->bytes = pcalloc(ndims * sizeof(PCBYTES));
   buf = serpatch->data + stats_size;
 
+  // bug667857, change defination of schema, server crash
+  // how many space is waiting for being read? The size of next pcb should never be larger than this!
+  left_space = serpatch->size - sizeof(uint32_t) * 4 - sizeof(PCBOUNDS) - stats_size;
+
   for (i = 0; i < ndims; i++)
   {
     PCBYTES *pcb = &(patch->bytes[i]);
     PCDIMENSION *dim = schema->dims[i];
-    pc_bytes_deserialize(buf, dim, pcb, true /*readonly*/,
+    size_t pcb_size_check = wkb_get_int32(buf + 1, false /*flipendian*/); /*bug672634, change defination of schema, server crash*/
+    if (pcb_size_check > left_space)
+    {
+      pc_patch_free(patch);
+      pcerror("%s: size dismatch! Please fix the pcschema definition or the "
+              "input pcpatch data",
+              __func__);
+      return NULL;
+    }
+    pc_bytes_deserialize(buf, dim, pcb, false /*bug668992, it mustn't be readonly because pbuf will be freed*/,
                          false /*flipendian*/);
+    
+    left_space -= (1 + 4 + pcb->size); /* compression type (1) + size of data (4) + data */
     pcb->npoints = npoints;
     buf += pc_bytes_serialized_size(pcb);
   }
@@ -922,6 +960,8 @@ static PCPATCH *pc_patch_lazperf_deserialize(const SERIALIZED_PATCH *serpatch,
   int npoints = serpatch->npoints;
   size_t stats_size = pc_stats_size(schema);
   uint8_t *buf = (uint8_t *)serpatch->data + stats_size;
+  PCSTATS *readonly_stats;
+  size_t left_space = 0;
 
   /* Reference the external data */
   patch = pcalloc(sizeof(PCPATCH_LAZPERF));
@@ -929,16 +969,36 @@ static PCPATCH *pc_patch_lazperf_deserialize(const SERIALIZED_PATCH *serpatch,
   /* Set up basic info */
   patch->type = serpatch->compression;
   patch->schema = schema;
-  patch->readonly = true;
+  patch->readonly = false;
   patch->npoints = npoints;
   patch->bounds = serpatch->bounds;
 
   /* Point into the stats area */
-  patch->stats = pc_patch_stats_deserialize(schema, serpatch->data);
+  readonly_stats = pc_patch_stats_deserialize(schema, serpatch->data);
+
+  /* bug672664, stats was freed, so result is not correct */
+  patch->stats = pc_stats_clone(readonly_stats);
+
+  pc_stats_free(readonly_stats);
+
+  // how many space is waiting for being read? lazperfsize should never be larger than this!
+  left_space = serpatch->size - sizeof(uint32_t) * 4 - sizeof(PCBOUNDS) - stats_size;
+
+  memcpy(&lazperfsize, buf, 4);
+  left_space -= 4;
+
+  if (lazperfsize != left_space)
+  {
+    pc_patch_free(patch);
+    pcerror("%s: size dismatch! The pcschema definition does not match "
+            "the input pcpatch data, please fix one of them",
+            __func__);
+    return NULL;
+  }
+
+  patch->lazperfsize = lazperfsize;
 
   /* Set up buffer */
-  memcpy(&lazperfsize, buf, 4);
-  patch->lazperfsize = lazperfsize;
   buf += 4;
 
   patch->lazperf = pcalloc(patch->lazperfsize);
@@ -983,7 +1043,9 @@ static uint8_t *pc_patch_wkb_set_char(uint8_t *wkb, char c)
   wkb += 1;
   return wkb;
 }
-
+// use pc_stats_clone should include pc_api_internal.h
+// and it has a same function, that makes it unable to compile
+#if 0
 /* 0 = xdr | big endian */
 /* 1 = ndr | little endian */
 static char machine_endian(void)
@@ -991,7 +1053,7 @@ static char machine_endian(void)
   static int check_int = 1; /* dont modify this!!! */
   return *((char *)&check_int);
 }
-
+#endif
 uint8_t *pc_patch_to_geometry_wkb_envelope(const SERIALIZED_PATCH *pa,
                                            const PCSCHEMA *schema,
                                            size_t *wkbsize)
@@ -1025,7 +1087,7 @@ uint8_t *pc_patch_to_geometry_wkb_envelope(const SERIALIZED_PATCH *pa,
     size += 4;
   }
 
-  wkb = palloc(size);
+  wkb = pcalloc(size);
   ptr = wkb;
 
   ptr = pc_patch_wkb_set_char(ptr, machine_endian()); /* Endian flag */

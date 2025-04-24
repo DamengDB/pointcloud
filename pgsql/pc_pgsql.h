@@ -11,14 +11,42 @@
 
 #include "pc_api.h"
 
-#include "postgres.h"
-#include "utils/elog.h"
+//#include "postgres.h"
+//#include "utils/elog.h"
+//
+///* Try to move these down */
+//#include "catalog/pg_type.h" /* for CSTRINGOID */
+//#include "lib/stringinfo.h"  /* For binary input */
+//#include "utils/array.h"
+//#include "utils/builtins.h" /* for pg_atoi */
 
-/* Try to move these down */
-#include "catalog/pg_type.h" /* for CSTRINGOID */
-#include "lib/stringinfo.h"  /* For binary input */
-#include "utils/array.h"
-#include "utils/builtins.h" /* for pg_atoi */
+typedef uint32_t uint32;
+typedef int32_t  int32;
+typedef uint8_t  uint8;
+typedef void*    FunctionCallInfo;
+typedef void*    Datum;
+typedef void*    FunctionCallInfoData;
+typedef double   float8;
+
+#define PGSQL_VERSION 160
+
+#define ERROR -1
+
+#define true 1
+#define false 0
+
+// Not like pgpointcloud, we dont't use << 2 here
+#define SET_VARSIZE(PTR,len) \
+	(*((uint32 *) (PTR)) = ((uint32) (len)))
+
+#define VARSIZE(PTR) (*(uint32_t*)PTR)
+
+#define ALIGNOF_BUFFER	32
+
+#define TYPEALIGN(ALIGNVAL,LEN)  \
+	(((uintptr_t) (LEN) + ((ALIGNVAL) - 1)) & ~((uintptr_t) ((ALIGNVAL) - 1)))
+
+#define BUFFERALIGN(LEN) TYPEALIGN(ALIGNOF_BUFFER, (LEN))
 
 #define PG_GETARG_SERPOINT_P(argnum)                                           \
   (SERIALIZED_POINT *)PG_DETOAST_DATUM(PG_GETARG_DATUM(argnum))
@@ -154,3 +182,8 @@ uint32 pcid_from_datum(Datum d);
 PCSTATS *pc_patch_stats_deserialize(const PCSCHEMA *schema, const uint8_t *buf);
 
 void pointcloud_init_constants_cache(void);
+
+
+SERIALIZED_PATCH *pcpatch_set_schema(SERIALIZED_PATCH *serpa,
+                                            PCSCHEMA *oschema,
+                                            PCSCHEMA *nschema, double def);

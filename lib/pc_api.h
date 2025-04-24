@@ -22,7 +22,7 @@
 #include "pc_config.h"
 
 #ifndef __GNUC__
-#define __attribute__ (x)
+#define __attribute__(x)
 #endif
 
 /**********************************************************************
@@ -202,13 +202,17 @@ typedef void *(*pc_reallocator)(void *mem, size_t size);
 typedef void (*pc_deallocator)(void *mem);
 typedef void (*pc_message_handler)(const char *string, va_list ap)
     __attribute__((format(printf, 1, 0)));
-
+typedef PCBYTES (*pc_bytes_zlib_decode_handler)(const PCBYTES pcb);
+typedef PCBYTES (*pc_bytes_zlib_encode_handler)(const PCBYTES pcb);
 /**********************************************************************
  * MEMORY MANAGEMENT
  */
 
+PCBYTES pc_bytes_zlib_decode(const PCBYTES pcb);
+PCBYTES pc_bytes_zlib_encode(const PCBYTES pcb);
+
 /** Allocate memory using the appropriate means (system/db) */
-void *pcalloc(size_t size);
+void* pcalloc(size_t size);
 /** Reallocate memory using the appropriate means (system/db) */
 void *pcrealloc(void *mem, size_t size);
 /** Free memory using the appropriate means (system/db) */
@@ -221,11 +225,15 @@ void pcinfo(const char *fmt, ...);
 void pcwarn(const char *fmt, ...);
 
 /** Set custom memory allocators and messaging (used by PgSQL module) */
+
 void pc_set_handlers(pc_allocator allocator, pc_reallocator reallocator,
                      pc_deallocator deallocator,
                      pc_message_handler error_handler,
                      pc_message_handler info_handler,
-                     pc_message_handler warning_handler);
+                     pc_message_handler warning_handler,
+                     pc_bytes_zlib_decode_handler zlib_decode_handler,
+                     pc_bytes_zlib_encode_handler zlib_encode_handler
+);
 
 /** Set program to use system memory allocators and messaging */
 void pc_install_default_handlers(void);
@@ -248,7 +256,7 @@ const char *pc_compression_name(int num);
 /**********************************************************************
  * SCHEMAS
  */
-
+PCSCHEMA* pc_schema_new(uint32_t ndims);
 /** Release the memory in a schema structure */
 void pc_schema_free(PCSCHEMA *pcs);
 /** Build a schema structure from the XML serialisation */
@@ -300,6 +308,9 @@ PCPOINT *pc_point_make(const PCSCHEMA *s);
 
 /** Create a new readonly PCPOINT on top of a data buffer */
 PCPOINT *pc_point_from_data(const PCSCHEMA *s, const uint8_t *data);
+
+/** Create a new not-readonly PCPOINT on top of a data buffer */
+PCPOINT *pc_point_from_data_clone(const PCSCHEMA *s, const uint8_t *data);
 
 /** Create a new read/write PCPOINT from a double array  with an offset */
 PCPOINT *pc_point_from_double_array(const PCSCHEMA *s, double *array,

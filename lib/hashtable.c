@@ -25,7 +25,7 @@ static const unsigned int primes[] = {
     786433,    1572869,   3145739,   6291469,   12582917,  25165843, 50331653,
     100663319, 201326611, 402653189, 805306457, 1610612741};
 const unsigned int prime_table_length = sizeof(primes) / sizeof(primes[0]);
-const float max_load_factor = 0.65;
+const float max_load_factor = 0.65f;
 
 /*****************************************************************************/
 /* hash_str */

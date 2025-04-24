@@ -19,7 +19,7 @@
  ***********************************************************************/
 
 #include "pc_api_internal.h"
-#include "zlib.h"
+//#include "zlib.h"
 #include <assert.h>
 #include <float.h>
 #include <stdarg.h>
@@ -1204,7 +1204,7 @@ pc_bytes_sigbits_decode(const PCBYTES pcb)
   pcerror("%s: got an unhandled errror", __func__);
   return pcb;
 }
-
+#if 0
 static voidpf pc_zlib_alloc(voidpf opaque, uInt nitems, uInt sz)
 {
   return pcalloc(sz * nitems);
@@ -1292,7 +1292,7 @@ pc_bytes_zlib_decode(const PCBYTES pcb)
   pcbout.compression = PC_DIM_NONE;
   return pcbout;
 }
-
+#endif
 /**
  * This flips bytes in-place, so won't work on readonly bytes
  */

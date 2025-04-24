@@ -9,10 +9,10 @@
 
 #include "pc_pgsql.h" /* Common PgSQL support for our type */
 
-Datum pcpatch_setpcid(PG_FUNCTION_ARGS);
-Datum pcpatch_transform(PG_FUNCTION_ARGS);
+//Datum pcpatch_setpcid(PG_FUNCTION_ARGS);
+//Datum pcpatch_transform(PG_FUNCTION_ARGS);
 
-static SERIALIZED_PATCH *pcpatch_set_schema(SERIALIZED_PATCH *serpa,
+SERIALIZED_PATCH *pcpatch_set_schema(SERIALIZED_PATCH *serpa,
                                             PCSCHEMA *oschema,
                                             PCSCHEMA *nschema, float8 def)
 {
@@ -28,7 +28,7 @@ static SERIALIZED_PATCH *pcpatch_set_schema(SERIALIZED_PATCH *serpa,
     if (oschema->compression == nschema->compression)
     {
       // no need to deserialize the patch
-      serpatch = palloc(serpa->size);
+      serpatch = pcalloc(serpa->size);
       if (!serpatch)
         return NULL;
       memcpy(serpatch, serpa, serpa->size);
@@ -65,7 +65,7 @@ static SERIALIZED_PATCH *pcpatch_set_schema(SERIALIZED_PATCH *serpa,
 
   return serpatch;
 }
-
+#if 0
 PG_FUNCTION_INFO_V1(pcpatch_setpcid);
 Datum pcpatch_setpcid(PG_FUNCTION_ARGS)
 {
@@ -109,3 +109,4 @@ Datum pcpatch_transform(PG_FUNCTION_ARGS)
 
   PG_RETURN_POINTER(serpatch);
 }
+#endif

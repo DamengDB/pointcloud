@@ -22,6 +22,8 @@ struct pc_context_t
   pc_message_handler err;
   pc_message_handler warn;
   pc_message_handler info;
+  pc_bytes_zlib_decode_handler zlib_decode;
+  pc_bytes_zlib_encode_handler zlib_encode;
 };
 
 static struct pc_context_t pc_context;
@@ -82,7 +84,10 @@ void pc_set_handlers(pc_allocator allocator, pc_reallocator reallocator,
                      pc_deallocator deallocator,
                      pc_message_handler error_handler,
                      pc_message_handler info_handler,
-                     pc_message_handler warn_handler)
+                     pc_message_handler warn_handler,
+                     pc_bytes_zlib_decode_handler zlib_decode_handler,
+                     pc_bytes_zlib_encode_handler zlib_encode_handler
+)
 {
   if (!allocator)
     allocator = pc_context.alloc;
@@ -103,10 +108,23 @@ void pc_set_handlers(pc_allocator allocator, pc_reallocator reallocator,
   pc_context.err = error_handler;
   pc_context.warn = warn_handler;
   pc_context.info = info_handler;
+  pc_context.zlib_decode = zlib_decode_handler;
+  pc_context.zlib_encode = zlib_encode_handler;
+
   return;
 }
 
-void *pcalloc(size_t size)
+PCBYTES pc_bytes_zlib_encode(const PCBYTES pcb)
+{
+    return pc_context.zlib_encode(pcb);
+}
+
+PCBYTES pc_bytes_zlib_decode(const PCBYTES pcb)
+{
+    return pc_context.zlib_decode(pcb);
+}
+
+void* pcalloc(size_t size)
 {
   void *mem;
   if (!size)

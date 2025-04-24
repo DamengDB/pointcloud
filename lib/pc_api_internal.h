@@ -25,6 +25,12 @@
 #define PC_SUCCESS 1
 #define PC_FAILURE 0
 
+#ifdef _WIN32
+#define bzero(s, n)	memset((s), 0, (n))
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#endif
+
 /**
  * How many compression types do we support?
  */
@@ -254,10 +260,10 @@ PCBYTES pc_bytes_run_length_decode(const PCBYTES pcb);
 PCBYTES pc_bytes_sigbits_encode(const PCBYTES pcb);
 /** Convert bit packed bytes to value bytes */
 PCBYTES pc_bytes_sigbits_decode(const PCBYTES pcb);
-/** Compress bytes using zlib */
-PCBYTES pc_bytes_zlib_encode(const PCBYTES pcb);
-/** De-compress bytes using zlib */
-PCBYTES pc_bytes_zlib_decode(const PCBYTES pcb);
+///** Compress bytes using zlib */
+//PCBYTES pc_bytes_zlib_encode(const PCBYTES pcb);
+///** De-compress bytes using zlib */
+//PCBYTES pc_bytes_zlib_decode(const PCBYTES pcb);
 
 /** How many runs are there in a value array? */
 uint32_t pc_bytes_run_count(const PCBYTES *pcb);
